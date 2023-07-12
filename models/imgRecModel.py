@@ -1,7 +1,7 @@
 class ImgRecModel:
-    weights=ROOT / 'yolov5s-seg.pt',  # model.pt path(s)
-    source=ROOT / 'data/images',  # file/dir/URL/glob/screen/0(webcam)
-    data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
+    weights=''
+    source=''
+    data=''
     imgsz=(640, 640),  # inference size (height, width)
     conf_thres=0.25,  # confidence threshold
     iou_thres=0.45,  # NMS IOU threshold
@@ -17,7 +17,7 @@ class ImgRecModel:
     augment=False,  # augmented inference
     visualize=False,  # visualize features
     update=False,  # update all models
-    project=ROOT / 'runs/predict-seg',  # save results to project/name
+    project=''
     name='exp',  # save results to project/name
     exist_ok=False,  # existing project/name ok, do not increment
     line_thickness=3,  # bounding box thickness (pixels)
