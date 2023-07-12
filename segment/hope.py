@@ -37,8 +37,7 @@ import sys
 from pathlib import Path
 
 import sys
-from handlers.threadHandler import ThreadHandler
-from models.imgRecModel import ImgRecModel
+
 from rplidar import RPLidar
 PORT_NAME = '/dev/ttyUSB0'
 lidar = RPLidar(PORT_NAME)
@@ -51,6 +50,8 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+from handlers.threadHandler import ThreadHandler
+from models.imgRecModel import ImgRecModel
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
 from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
