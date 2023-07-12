@@ -156,7 +156,7 @@ def run(
                 #print("made it in big")
                 skip += 1
                 imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
-                imgRec(imgRecModel)
+                imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
                 
     except KeyboardInterrupt:
         print('\nStopping.')
@@ -169,25 +169,25 @@ def run(
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
 
-def imgRec(imgRecModel):
-    for path, im, im0s, vid_cap, s in imgRecModel.dataset:
+def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows,save_img):
+    for path, im, im0s, vid_cap, s in dataset:
         if big:
             break
 
-        with imgRecModel.dt[0]:
-            im = torch.from_numpy(im).to(imgRecModel.model.device)
-            im = im.half() if imgRecModel.model.fp16 else im.float()  # uint8 to fp16/32
+        with dt[0]:
+            im = torch.from_numpy(im).to(model.device)
+            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
             im /= 255  # 0 - 255 to 0.0 - 1.0
             if len(im.shape) == 3:
                 im = im[None]  # expand for batch dim
 
         # Inference
-        with imgRecModel.dt[1]:
-            visualize = increment_path(imgRecModel.save_dir / Path(path).stem, mkdir=True) if visualize else False
-            pred, proto = imgRecModel.model(im, augment=imgRecModel.augment, visualize=visualize)[:2]
+        with dt[1]:
+            imgRecModel.visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if imgRecModel.visualize else False
+            pred, proto = model(im, augment=imgRecModel.augment, visualize=imgRecModel.visualize)[:2]
 
         # NMS
-        with imgRecModel.dt[2]:
+        with dt[2]:
             pred = non_max_suppression(pred, imgRecModel.conf_thres, imgRecModel.iou_thres, imgRecModel.classes, imgRecModel.agnostic_nms, max_det=imgRecModel.max_det, nm=32)
 
         # Second-stage classifier (optional)
@@ -201,18 +201,18 @@ def imgRec(imgRecModel):
                 break
 
             seen += 1
-            if imgRecModel.webcam:  # batch_size >= 1
-                p, im0, frame = path[i], im0s[i].copy(), imgRecModel.dataset.count
+            if webcam:  # batch_size >= 1
+                p, im0, frame = path[i], im0s[i].copy(), dataset.count
                 s += f'{i}: '
             else:
-                p, im0, frame = path, im0s.copy(), getattr(imgRecModel.dataset, 'frame', 0)
+                p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
             p = Path(p)  # to Path
-            save_path = str(imgRecModel.save_dir / p.name)  # im.jpg
-            txt_path = str(imgRecModel.save_dir / 'labels' / p.stem) + ('' if imgRecModel.dataset.mode == 'image' else f'_{frame}')  # im.txt
+            save_path = str(save_dir / p.name)  # im.jpg
+            txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             imc = im0.copy() if imgRecModel.save_crop else im0  # for save_crop
-            annotator = Annotator(im0, line_width=imgRecModel.line_thickness, example=str(imgRecModel.names))
+            annotator = Annotator(im0, line_width=imgRecModel.line_thickness, example=str(names))
             if len(det):
                 if imgRecModel.retina_masks:
                     # scale bbox first the crop masks
@@ -231,7 +231,7 @@ def imgRec(imgRecModel):
                 # Print results
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
-                    s += f"{n} {imgRecModel.names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Mask plotting
                 annotator.masks(
@@ -248,19 +248,19 @@ def imgRec(imgRecModel):
                         with open(f'{txt_path}.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
-                    if imgRecModel.save_img or imgRecModel.save_crop or imgRecModel.view_img:  # Add bbox to image
+                    if save_img or imgRecModel.save_crop or imgRecModel.view_img:  # Add bbox to image
                         c = int(cls)  # integer class
-                        label = None if imgRecModel.hide_labels else (imgRecModel.names[c] if imgRecModel.hide_conf else f'{imgRecModel.names[c]} {conf:.2f}')
+                        label = None if imgRecModel.hide_labels else (names[c] if imgRecModel.hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
                         # annotator.draw.polygon(segments[j], outline=colors(c, True), width=3)
                     if imgRecModel.save_crop:
-                        save_one_box(xyxy, imc, file=imgRecModel.save_dir / 'crops' / imgRecModel.names[c] / f'{p.stem}.jpg', BGR=True)
+                        save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
             
             # Stream results
             im0 = annotator.result()
             if imgRecModel.view_img:
-                if platform.system() == 'Linux' and p not in imgRecModel.windows:
-                    imgRecModel.windows.append(p)
+                if platform.system() == 'Linux' and p not in windows:
+                    windows.append(p)
                     cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
                     cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
                 cv2.imshow(str(p), im0)
@@ -268,7 +268,7 @@ def imgRec(imgRecModel):
                 if cv2.waitKey(1) == ord('q'):  # 1 millisecond
                     exit()
             # Print time (inference-only)
-            LOGGER.info(f"{s}{'' if len(det) else 'w'}{imgRecModel.dt[1].dt * 1E3:.1f}ms")
+            LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
             big = True
             #print('big update: ', big)
             break
