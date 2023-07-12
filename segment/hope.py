@@ -34,6 +34,10 @@ import argparse
 import os
 import platform
 import sys
+import logging
+import time
+import threading
+
 from pathlib import Path
 
 import sys
@@ -156,7 +160,9 @@ def run(
                 #print("made it in big")
                 skip += 1
                 imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
-                imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
+                logging.info("Creating new thread!")
+                x = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img))
+                # imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
                 
     except KeyboardInterrupt:
         print('\nStopping.')
