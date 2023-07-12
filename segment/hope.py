@@ -129,7 +129,129 @@ def run(
     hope = lidar.iter_measures(max_buf_meas=30000)
     big = False
     try:
-        lidar_scanning(hope, big, dataset, dt, model, seen, windows, visualize)
+        # lidar_scanning(hope, big, dataset, dt, model, seen, windows, visualize)
+        #print('Recording measurments... Press Crl+C to stop.')
+        count = 0
+        skip = 0
+        #print('before')
+        buff = 0
+        for measurment in hope:
+            
+            angle = measurment[2]
+            dis = measurment[3]
+            
+            if big:
+                lidar.clean_input()
+                lidar.start()
+                big = False 
+            print(measurment)
+            
+            if(angle > 340 or angle < 20) and (dis != 0 and dis < 1000):
+                #print("made it in big")
+                skip += 1
+                for path, im, im0s, vid_cap, s in dataset:
+                    if big:
+                        break
+
+                    with dt[0]:
+                        im = torch.from_numpy(im).to(model.device)
+                        im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
+                        im /= 255  # 0 - 255 to 0.0 - 1.0
+                        if len(im.shape) == 3:
+                            im = im[None]  # expand for batch dim
+
+                    # Inference
+                    with dt[1]:
+                        visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
+                        pred, proto = model(im, augment=augment, visualize=visualize)[:2]
+
+                    # NMS
+                    with dt[2]:
+                        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det, nm=32)
+
+                    # Second-stage classifier (optional)
+                    # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
+
+                    # Process predictions
+                    
+                    for i, det in enumerate(pred):  # per image
+                        if(skip % 2 == 0):
+                            skip += 1
+                            break
+
+                        seen += 1
+                        if webcam:  # batch_size >= 1
+                            p, im0, frame = path[i], im0s[i].copy(), dataset.count
+                            s += f'{i}: '
+                        else:
+                            p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
+
+                        p = Path(p)  # to Path
+                        save_path = str(save_dir / p.name)  # im.jpg
+                        txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
+                        s += '%gx%g ' % im.shape[2:]  # print string
+                        imc = im0.copy() if save_crop else im0  # for save_crop
+                        annotator = Annotator(im0, line_width=line_thickness, example=str(names))
+                        if len(det):
+                            if retina_masks:
+                                # scale bbox first the crop masks
+                                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()  # rescale boxes to im0 size
+                                masks = process_mask_native(proto[i], det[:, 6:], det[:, :4], im0.shape[:2])  # HWC
+                            else:
+                                masks = process_mask(proto[i], det[:, 6:], det[:, :4], im.shape[2:], upsample=True)  # HWC
+                                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()  # rescale boxes to im0 size
+
+                            # Segments
+                            if save_txt:
+                                segments = [
+                                    scale_segments(im0.shape if retina_masks else im.shape[2:], x, im0.shape, normalize=True)
+                                    for x in reversed(masks2segments(masks))]
+
+                            # Print results
+                            for c in det[:, 5].unique():
+                                n = (det[:, 5] == c).sum()  # detections per class
+                                s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+
+                            # Mask plotting
+                            annotator.masks(
+                                masks,
+                                colors=[colors(x, True) for x in det[:, 5]],
+                                im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(device).permute(2, 0, 1).flip(0).contiguous() /
+                                255 if retina_masks else im[i])
+
+                            # Write results
+                            for j, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
+                                if save_txt:  # Write to file
+                                    seg = segments[j].reshape(-1)  # (n,2) to (n*2)
+                                    line = (cls, *seg, conf) if save_conf else (cls, *seg)  # label format
+                                    with open(f'{txt_path}.txt', 'a') as f:
+                                        f.write(('%g ' * len(line)).rstrip() % line + '\n')
+
+                                if save_img or save_crop or view_img:  # Add bbox to image
+                                    c = int(cls)  # integer class
+                                    label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
+                                    annotator.box_label(xyxy, label, color=colors(c, True))
+                                    # annotator.draw.polygon(segments[j], outline=colors(c, True), width=3)
+                                if save_crop:
+                                    save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+                        
+                        # Stream results
+                        im0 = annotator.result()
+                        if view_img:
+                            if platform.system() == 'Linux' and p not in windows:
+                                windows.append(p)
+                                cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
+                                cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+                            cv2.imshow(str(p), im0)
+                            #print("I think it is this")
+                            if cv2.waitKey(1) == ord('q'):  # 1 millisecond
+                                exit()
+                        # Print time (inference-only)
+                        LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
+                        big = True
+                        #print('big update: ', big)
+                        break
+                #lidar.stop()
                 
     except KeyboardInterrupt:
         print('\nStopping.')
@@ -141,132 +263,6 @@ def run(
 
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
-
-
-def lidar_scanning(hope, big, dataset, dt, model, seen, windows, visualize):
-    #print('Recording measurments... Press Crl+C to stop.')
-    count = 0
-    skip = 0
-    #print('before')
-    buff = 0
-    for measurment in hope:
-        
-        angle = measurment[2]
-        dis = measurment[3]
-        
-        if big:
-            lidar.clean_input()
-            lidar.start()
-            big = False 
-        print(measurment)
-        
-        if(angle > 340 or angle < 20) and (dis != 0 and dis < 1000):
-            #print("made it in big")
-            skip += 1
-            for path, im, im0s, vid_cap, s in dataset:
-                if big:
-                    break
-
-                with dt[0]:
-                    im = torch.from_numpy(im).to(model.device)
-                    im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
-                    im /= 255  # 0 - 255 to 0.0 - 1.0
-                    if len(im.shape) == 3:
-                        im = im[None]  # expand for batch dim
-
-                # Inference
-                with dt[1]:
-                    visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-                    pred, proto = model(im, augment=augment, visualize=visualize)[:2]
-
-                # NMS
-                with dt[2]:
-                    pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det, nm=32)
-
-                # Second-stage classifier (optional)
-                # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
-
-                # Process predictions
-                
-                for i, det in enumerate(pred):  # per image
-                    if(skip % 2 == 0):
-                        skip += 1
-                        break
-
-                    seen += 1
-                    if webcam:  # batch_size >= 1
-                        p, im0, frame = path[i], im0s[i].copy(), dataset.count
-                        s += f'{i}: '
-                    else:
-                        p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
-
-                    p = Path(p)  # to Path
-                    save_path = str(save_dir / p.name)  # im.jpg
-                    txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
-                    s += '%gx%g ' % im.shape[2:]  # print string
-                    imc = im0.copy() if save_crop else im0  # for save_crop
-                    annotator = Annotator(im0, line_width=line_thickness, example=str(names))
-                    if len(det):
-                        if retina_masks:
-                            # scale bbox first the crop masks
-                            det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()  # rescale boxes to im0 size
-                            masks = process_mask_native(proto[i], det[:, 6:], det[:, :4], im0.shape[:2])  # HWC
-                        else:
-                            masks = process_mask(proto[i], det[:, 6:], det[:, :4], im.shape[2:], upsample=True)  # HWC
-                            det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()  # rescale boxes to im0 size
-
-                        # Segments
-                        if save_txt:
-                            segments = [
-                                scale_segments(im0.shape if retina_masks else im.shape[2:], x, im0.shape, normalize=True)
-                                for x in reversed(masks2segments(masks))]
-
-                        # Print results
-                        for c in det[:, 5].unique():
-                            n = (det[:, 5] == c).sum()  # detections per class
-                            s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
-                        # Mask plotting
-                        annotator.masks(
-                            masks,
-                            colors=[colors(x, True) for x in det[:, 5]],
-                            im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(device).permute(2, 0, 1).flip(0).contiguous() /
-                            255 if retina_masks else im[i])
-
-                        # Write results
-                        for j, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
-                            if save_txt:  # Write to file
-                                seg = segments[j].reshape(-1)  # (n,2) to (n*2)
-                                line = (cls, *seg, conf) if save_conf else (cls, *seg)  # label format
-                                with open(f'{txt_path}.txt', 'a') as f:
-                                    f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-                            if save_img or save_crop or view_img:  # Add bbox to image
-                                c = int(cls)  # integer class
-                                label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                                annotator.box_label(xyxy, label, color=colors(c, True))
-                                # annotator.draw.polygon(segments[j], outline=colors(c, True), width=3)
-                            if save_crop:
-                                save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-                    
-                    # Stream results
-                    im0 = annotator.result()
-                    if view_img:
-                        if platform.system() == 'Linux' and p not in windows:
-                            windows.append(p)
-                            cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                            cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                        cv2.imshow(str(p), im0)
-                        #print("I think it is this")
-                        if cv2.waitKey(1) == ord('q'):  # 1 millisecond
-                            exit()
-                    # Print time (inference-only)
-                    LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
-                    big = True
-                    #print('big update: ', big)
-                    break
-            #lidar.stop()
-
 
 def parse_opt():
     parser = argparse.ArgumentParser()
