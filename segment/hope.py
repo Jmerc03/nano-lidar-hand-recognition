@@ -34,6 +34,10 @@ import argparse
 import os
 import platform
 import sys
+import logging
+import time
+import threading
+
 from pathlib import Path
 
 import sys
@@ -41,6 +45,8 @@ import sys
 from rplidar import RPLidar
 PORT_NAME = '/dev/ttyUSB0'
 lidar = RPLidar(PORT_NAME)
+
+from queue import Queue
 
 import torch
 
@@ -134,6 +140,8 @@ def run(
     hope = lidar.iter_measures(max_buf_meas=30000)
 
     big = False
+    q = Queue(maxsize = 5)
+
     try:
         # lidar_scanning(hope, big, dataset, dt, model, seen, windows, visualize)
         #print('Recording measurments... Press Crl+C to stop.')
@@ -141,23 +149,54 @@ def run(
         skip = 0
         #print('before')
         buff = 0
+        imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
+        imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img), daemon=True)
+                
         for measurment in hope:
             
             angle = measurment[2]
             dis = measurment[3]
             
-            if big:
-                lidar.clean_input()
-                lidar.start()
-                big = False 
-            print(measurment)
-            
             if(angle > 340 or angle < 20) and (dis != 0 and dis < 1000):
                 #print("made it in big")
                 skip += 1
-                imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
-                imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
-                
+                if (not( imgRecThread.is_alive() )):
+                    #print ("Creating new thread!")
+                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img, q), daemon=True)
+                    imgRecThread.start()
+                    #print('before')
+                    #cv2.imshow("thing",2)
+                    #print('after')
+                    """
+                    #p = q.get()
+                    #im0 = q.get()
+                    #det = q.get()
+                    #s = q.get()
+                    #big = q.get()
+                    #print(big)
+                    if (big):
+                        print(im0)
+                        if imgRecModel.view_img:
+                            if platform.system() == 'Linux' and p not in windows:
+                                print ("Appending windows")
+                                windows.append(p)
+                                print ("Naming window")
+                                cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
+                                print ("Resizing window")
+                                cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+                        cv2.imshow(str(p), im0)
+                        print("I think it is this")
+                        cv2.waitKey(1)
+                        cv2.destroyAllWindows()
+                        # if cv2.waitKey(1) == ord('q'):  # 1 millisecond
+                            # print ("Exiting")
+                            # exit()
+                        # Print time (inference-only)
+                        print ("View image completed")
+                        
+                        big = False
+                        """
+                        # imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
     except KeyboardInterrupt:
         print('\nStopping.')
         lidar.stop()
@@ -167,12 +206,15 @@ def run(
     #LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
 
     if update:
-        strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
+        strip_optimizer(weights[0])  # update model (tco fix SourceChangeWarning)
 
-def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows,save_img):
+def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img, q):
+    #print ("Img Rec!")
     for path, im, im0s, vid_cap, s in dataset:
+        #print ("Whatever works")
         if big:
-            break
+            #print("Is BIG")
+            return
 
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
@@ -181,11 +223,13 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
             if len(im.shape) == 3:
                 im = im[None]  # expand for batch dim
 
+        #print ("DT 0 Completed")
         # Inference
         with dt[1]:
             imgRecModel.visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if imgRecModel.visualize else False
             pred, proto = model(im, augment=imgRecModel.augment, visualize=imgRecModel.visualize)[:2]
 
+        #print ("DT 1 Completed")
         # NMS
         with dt[2]:
             pred = non_max_suppression(pred, imgRecModel.conf_thres, imgRecModel.iou_thres, imgRecModel.classes, imgRecModel.agnostic_nms, max_det=imgRecModel.max_det, nm=32)
@@ -195,10 +239,9 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
 
         # Process predictions
         
+        #print ("DT 2 Completed")
         for i, det in enumerate(pred):  # per image
-            if(skip % 2 == 0):
-                skip += 1
-                break
+            #print ("Image read")
 
             seen += 1
             if webcam:  # batch_size >= 1
@@ -207,6 +250,7 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
             else:
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
+            #print ("Image aquired.")
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # im.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
@@ -256,23 +300,24 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
                     if imgRecModel.save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
             
+            #print ("Image broken up")
             # Stream results
             im0 = annotator.result()
-            if imgRecModel.view_img:
-                if platform.system() == 'Linux' and p not in windows:
-                    windows.append(p)
-                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                cv2.imshow(str(p), im0)
-                #print("I think it is this")
-                if cv2.waitKey(1) == ord('q'):  # 1 millisecond
-                    exit()
-            # Print time (inference-only)
-            LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
-            big = True
+            cv2.destroyAllWindows()
+            
+            
+            #q.put(p)
+            #q.put(im0)
+
+            #q.put(det)
+            #q.put(s)
+            #q.put(True)
             #print('big update: ', big)
-            break
+            LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
+            print ("BREAK!")
+            return
     #lidar.stop()
+    #print ("Done with thread!")
 
 def parse_opt():
     parser = argparse.ArgumentParser()
