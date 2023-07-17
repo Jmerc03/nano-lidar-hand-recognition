@@ -48,6 +48,8 @@ lidar = RPLidar(PORT_NAME)
 
 from queue import Queue
 
+import serial as ser
+
 import torch
 
 FILE = Path(__file__).resolve()
@@ -143,14 +145,9 @@ def run(
     q = Queue(maxsize = 5)
 
     try:
-        # lidar_scanning(hope, big, dataset, dt, model, seen, windows, visualize)
         #print('Recording measurments... Press Crl+C to stop.')
-        count = 0
-        skip = 0
-        #print('before')
-        buff = 0
         imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
-        imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img), daemon=True)
+        imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img), daemon=True)
                 
         for measurment in hope:
             
@@ -159,21 +156,18 @@ def run(
             
             if(angle > 340 or angle < 20) and (dis != 0 and dis < 1000):
                 #print("made it in big")
-                skip += 1
                 if (not( imgRecThread.is_alive() )):
                     #print ("Creating new thread!")
-                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img, q), daemon=True)
+                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q), daemon=True)
                     imgRecThread.start()
-                    #print('before')
-                    #cv2.imshow("thing",2)
-                    #print('after')
-                    """
-                    #p = q.get()
-                    #im0 = q.get()
-                    #det = q.get()
-                    #s = q.get()
-                    #big = q.get()
-                    #print(big)
+
+                    """ Que and attempt to show detected frames
+                    p = q.get()
+                    im0 = q.get()
+                    det = q.get()
+                    s = q.get()
+                    big = q.get()
+                    print(big)
                     if (big):
                         print(im0)
                         if imgRecModel.view_img:
@@ -196,19 +190,11 @@ def run(
                         
                         big = False
                         """
-                        # imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img)
     except KeyboardInterrupt:
         print('\nStopping.')
         lidar.stop()
-                
-    # Print results
-    t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
-    #LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
 
-    if update:
-        strip_optimizer(weights[0])  # update model (tco fix SourceChangeWarning)
-
-def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, names, windows, save_img, q):
+def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q):
     #print ("Img Rec!")
     for path, im, im0s, vid_cap, s in dataset:
         #print ("Whatever works")
@@ -305,19 +291,29 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
             im0 = annotator.result()
             cv2.destroyAllWindows()
             
+            """ Que variables
+            q.put(p)
+            q.put(im0)
+            q.put(det)
+            q.put(s)
+            q.put(True)
+            """
             
-            #q.put(p)
-            #q.put(im0)
-
-            #q.put(det)
-            #q.put(s)
-            #q.put(True)
-            #print('big update: ', big)
             LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
+            out = (f"{s}{'' if len(det) else 'w'}")
+            stuff = out.split(" ")
+            print(len(stuff))
+            if(len(stuff) <= 3):
+                print("Nothing Detected")
+                return
+            else:
+                out = stuff[3][:-1]
+                print(out)
+                sers = ser.Serial("/dev/ttyUSB0", 115200)
+                sers.write(out, " Detected")
+            
             print ("BREAK!")
             return
-    #lidar.stop()
-    #print ("Done with thread!")
 
 def parse_opt():
     parser = argparse.ArgumentParser()
