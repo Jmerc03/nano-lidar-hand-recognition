@@ -46,7 +46,7 @@ from rplidar import RPLidar
 PORT_NAME = '/dev/ttyUSB0'
 lidar = RPLidar(PORT_NAME)
 
-from queue import Queue
+#from queue import Queue
 
 import serial as ser
 
@@ -142,7 +142,7 @@ def run(
     hope = lidar.iter_measures(max_buf_meas=30000)
 
     big = False
-    q = Queue(maxsize = 5)
+    #q = Queue(maxsize = 5)
 
     try:
         #print('Recording measurments... Press Crl+C to stop.')
