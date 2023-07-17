@@ -48,6 +48,8 @@ lidar = RPLidar(PORT_NAME)
 
 from queue import Queue
 
+import serial as ser
+
 import torch
 
 FILE = Path(__file__).resolve()
@@ -314,6 +316,18 @@ def imgRec(imgRecModel, dataset, big, dt, model, skip, seen, webcam, save_dir, n
             #q.put(True)
             #print('big update: ', big)
             LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
+            out = (f"{s}{'' if len(det) else 'w'}")
+            stuff = out.split(" ")
+            print(len(stuff))
+            if(len(stuff) <= 3):
+                print("WHAAATT!?")
+                return
+            else:
+                out = stuff[3][:-1]
+                print(out)
+                sers = ser.Serial("/dev/ttyUSB0", 115200)
+                sers.write(out)
+            
             print ("BREAK!")
             return
     #lidar.stop()
