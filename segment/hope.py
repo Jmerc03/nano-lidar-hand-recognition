@@ -194,7 +194,7 @@ def run(
         print('\nStopping.')
         lidar.stop()
 
-def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q):
+def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img):
     #print ("Img Rec!")
     for path, im, im0s, vid_cap, s in dataset:
         #print ("Whatever works")
@@ -309,10 +309,14 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
             else:
                 out = stuff[3][:-1]
                 print(out)
-                sers = ser.Serial("/dev/ttyUSB0", 115200)
-                sers.write(out, " Detected")
-            
-            print ("BREAK!")
+                ans = out + " Dectected"
+                print(ans)
+                try:
+                    sers = ser.Serial("/dev/ttyUSB1", 115200)
+                    sers.write(ans)
+                except Exception as e:
+                    print(e)
+            print("BREAK!")
             return
 
 def parse_opt():
