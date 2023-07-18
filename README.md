@@ -1,4 +1,4 @@
-## <div font-size=24 align="center" >YOLOv8 + LiDAR</div>
+## <div align="center" >Custom YOLOv8 Dectection with LiDAR Activation</div>
 
 ## <div align="left">Prerequisites</div>
 Make sure you have a conda environment that can run [yolov5.](https://github.com/ultralytics/yolov5)
@@ -47,7 +47,7 @@ To use segmentation with other objects or models simply replace the model best.p
 
 Currently the system writes to USB1, but that port may or may not be avaliable. To change this go to line 326 in [hope.py](./segment/hope.py) and change the port.
 
-To pass variables inbetween threads uncomment all q lines and add variables to the que on one side and get them on the other side. 
+To pass variables inbetween threads use a que. There are multple lines commented out for ques. You will need to pass the que into the thread as well. 
 
 For development I am using the RPLidar A1M8 and a intel RealSence Camera.
 

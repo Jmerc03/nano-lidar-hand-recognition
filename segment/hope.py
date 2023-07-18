@@ -158,7 +158,7 @@ def run(
                 #print("made it in big")
                 if (not( imgRecThread.is_alive() )):
                     #print ("Creating new thread!")
-                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q), daemon=True)
+                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img), daemon=True)
                     imgRecThread.start()
 
                     """ Que and attempt to show detected frames
