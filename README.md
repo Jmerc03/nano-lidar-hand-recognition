@@ -1,9 +1,14 @@
-## <div align="center">Prerequisets</div>
+YOLOv8 + LiDAR
+=================================
+
+## <div align="left">Prerequisites</div>
 Make sure you have a conda environment that can run [yolov5.](https://github.com/ultralytics/yolov5)
+
 Common errors include:
-- Not having the correct torch verison. Use the correct version for your system. I recomment using the [Pytorch website.](https://pytorch.org/)
+- Not having the correct torch verison. Use the correct version for your system. I recommend using the [Pytorch website.](https://pytorch.org/)
 
 Get [rplidar](https://github.com/Slamtec/rplidar_sdk) working on your machine. 
+
 Common erros include:
 - Not giving the port the correct permisions
 ```bash
@@ -14,7 +19,11 @@ chmod 666 /dev/ttyUSB0
 ```bash
 ./ultra_simple --channel --serial /dev/ttyUSB0 115200
 ```
-- If errors persist try adding $USER to dialout group
+- Sometimes it is necessary to add the user to the dialout group
+```bash
+sudo adduser second_user dialout
+```
+
 
 ## <div align="center">YOLOv8 + LiDAR</div>
 First make sure you have a conda environment that can run yolov5
