@@ -308,7 +308,6 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
                 return
             else:
                 out = stuff[3][:-1]
-                print(out)
                 ans = out + " Dectected"
                 print(ans)
                 try:
