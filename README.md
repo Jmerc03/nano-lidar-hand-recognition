@@ -1,4 +1,4 @@
-YOLOv8 + LiDAR
+<div algin = "center" >YOLOv8 + LiDAR</div>
 =================================
 
 ## <div align="left">Prerequisites</div>
@@ -25,7 +25,7 @@ sudo adduser second_user dialout
 ```
 
 
-## <div align="center">YOLOv8 + LiDAR</div>
+## <div align="left">YOLOv8 + LiDAR</div>
 First make sure you have a conda environment that can run yolov5
 Then run these commands.
 
@@ -43,13 +43,14 @@ For every other time just run:
 ./run.sh
 ```
 
-## <div align="center">Extra Information</div>
+## <div align="left">Extra Information</div>
 To use segmentation with other objects or models simply replace the model best.pt with your own. This file is in ./runs/best.pt
 
-Currently the system writes to USB1, but that port may or may not be avaliable. To change the write port go to line 326 and change the port.
+Currently the system writes to USB1, but that port may or may not be avaliable. To change this go to line 326 in [hope.py](./segment/hope.py) and change the port.
 
 To pass variables inbetween threads uncomment all q lines and add variables to the que on one side and get them on the other side. 
 
-In the future I hope to get the screen to output after each frame, but for the sake of releasing a working version, that feature was scrapped. 
-
 For development I am using the RPLidar A1M8 and a intel RealSence Camera.
+
+## <div align="left">Future Features</div>
+In the future I hope to get the screen to output after each frame, but for the sake of releasing a working version, that feature was scrapped. 
