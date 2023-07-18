@@ -46,7 +46,7 @@ from rplidar import RPLidar
 PORT_NAME = '/dev/ttyUSB0'
 lidar = RPLidar(PORT_NAME)
 
-from queue import Queue
+#from queue import Queue
 
 import serial as ser
 
@@ -142,7 +142,7 @@ def run(
     hope = lidar.iter_measures(max_buf_meas=30000)
 
     big = False
-    q = Queue(maxsize = 5)
+    #q = Queue(maxsize = 5)
 
     try:
         #print('Recording measurments... Press Crl+C to stop.')
@@ -158,7 +158,7 @@ def run(
                 #print("made it in big")
                 if (not( imgRecThread.is_alive() )):
                     #print ("Creating new thread!")
-                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q), daemon=True)
+                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img), daemon=True)
                     imgRecThread.start()
 
                     """ Que and attempt to show detected frames
@@ -194,7 +194,7 @@ def run(
         print('\nStopping.')
         lidar.stop()
 
-def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, q):
+def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img):
     #print ("Img Rec!")
     for path, im, im0s, vid_cap, s in dataset:
         #print ("Whatever works")
@@ -308,11 +308,14 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
                 return
             else:
                 out = stuff[3][:-1]
-                print(out)
-                sers = ser.Serial("/dev/ttyUSB0", 115200)
-                sers.write(out, " Detected")
-            
-            print ("BREAK!")
+                ans = out + " Dectected"
+                print(ans)
+                try:
+                    sers = ser.Serial("/dev/ttyUSB1", 115200)
+                    sers.write(ans)
+                except Exception as e:
+                    print(e)
+            print("BREAK!")
             return
 
 def parse_opt():
