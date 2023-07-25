@@ -48,6 +48,8 @@ lidar = RPLidar(PORT_NAME)
 
 #from queue import Queue
 
+from pymavlink import mavutil
+
 import serial as ser
 
 import torch
@@ -100,6 +102,114 @@ def run(
     vid_stride=1,  # video frame-rate stride
     retina_masks=False,
 ):
+    
+    #########################################Functions################################
+
+# Arm  armBlueRov2
+def arm():
+    master.mav.command_long_send(
+        master.target_system,
+        master.target_component,
+        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+        0,
+        1, 0, 0, 0, 0, 0, 0)
+
+
+# Disarm
+def disarm():
+    master.mav.command_long_send(
+        master.target_system,
+        master.target_component,
+        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+        0,
+        0, 0, 0, 0, 0, 0, 0)
+
+master = mavutil.mavlink_connection('udpin:0.0.0.0:14567')
+master.wait_heartbeat()
+
+# Create a function to send RC values
+# More information about Joystick channels
+# here: https://www.ardusub.com/operators-manual/rc-input-and-output.html#rc-inputs
+def set_rc_channel_pwm(channel_id, pwm=1500):
+    """ Set RC channel pwm value
+    Args:
+        channel_id (TYPE): Channel ID
+        pwm (int, optional): Channel pwm value 1100-1900
+    """
+    if channel_id < 1 or channel_id > 8:
+        print("Channel does not exist.")
+        return
+
+    # Mavlink 2 supports up to 18 channels:
+    # https://mavlink.io/en/messages/common.html#RC_CHANNELS_OVERRIDE
+    rc_channel_values = [65535 for _ in range(18)]
+    for i in range(6):
+        rc_channel_values[i] = 1500
+    rc_channel_values[channel_id - 1] = pwm
+    # print(rc_channel_values)
+    master.mav.rc_channels_override_send(
+        master.target_system,  # target_system
+        master.target_component,  # target_component
+        *rc_channel_values)  # RC channel list, in microseconds.
+
+
+def clear_motion(stopped_pwm=1500):
+    ''' Sets all 6 motion direction RC inputs to 'stopped_pwm'. '''
+    rc_channel_values = [65535 for _ in range(18)]
+    for i in range(6):
+        rc_channel_values[i] = stopped_pwm
+
+    master.mav.rc_channels_override_send(
+        master.target_system,  # target_system
+        master.target_component,  # target_component
+        *rc_channel_values)  # RC channel list, in microseconds.
+    # print('clear_motion')
+
+
+def change_mode(mode='MANUAL'):
+    """
+    :param mode: 'MANUAL' or 'STABILIZE' or 'ALT_HOLD'
+    """
+    if mode not in master.mode_mapping():
+        print("Unknown mode : {}".format(mode))
+        print('Try: ', list(master.mode_mapping().keys()))
+        sys.exit(1)
+    mode_id = master.mode_mapping()[mode]
+    master.mav.set_mode_send(
+        master.target_system,
+        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        mode_id)
+
+    while True:
+        # Wait for ACK command
+        ack_msg = master.recv_match(type='COMMAND_ACK', blocking=True)
+        ack_msg = ack_msg.to_dict()
+        # Check if command in the same in `set_mode`
+        if ack_msg['command'] == mavutil.mavlink.MAVLINK_MSG_ID_SET_MODE:
+            print('success')
+            break
+
+
+def request_message_interval(message_id, frequency_hz):
+    """
+    Request MAVLink message in a desired frequency,
+    documentation for SET_MESSAGE_INTERVAL:
+        https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
+
+    Args:
+        message_id (int): MAVLink message ID
+        frequency_hz (float): Desired frequency in Hz
+    """
+    master.mav.command_long_send(
+        master.target_system, master.target_component,
+        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        message_id,  # The MAVLink message ID
+        1e6 / frequency_hz,
+        # The interval between two messages in microseconds. Set to -1 to disable and 0 to request default rate.
+        0,
+        # Target address of message stream (if message has target address fields). 0: Flight-stack default (recommended), 1: address of requestor, 2: broadcast.
+        0, 0, 0, 0)
+
     lidar.stop()
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -143,6 +253,8 @@ def run(
 
     big = False
     #q = Queue(maxsize = 5)
+
+
 
     try:
         #print('Recording measurments... Press Crl+C to stop.')
@@ -313,6 +425,15 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
                 try:
                     sers = ser.Serial("/dev/ttyUSB1", 115200)
                     sers.write(ans)
+                    if(ans == 'Stop'):
+                        set_rc_channel_pwm(3, 1800)
+                    if(ans == 'Left'):
+                        set_rc_channel_pwm(1, 510)
+                    if(ans == 'Right'):
+                        set_rc_channel_pwm(1, 0)
+                    if(ans == 'Go'):
+                        set_rc_channel_pwm(3, 0)
+
                 except Exception as e:
                     print(e)
             print("BREAK!")
