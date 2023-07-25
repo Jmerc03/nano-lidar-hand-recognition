@@ -426,13 +426,13 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
                     sers = ser.Serial("/dev/ttyUSB1", 115200)
                     sers.write(ans)
                     if(ans == 'Stop'):
-                        set_rc_channel_pwm(3, 1800)
+                        set_rc_channel_pwm(3, 1500)
                     if(ans == 'Left'):
-                        set_rc_channel_pwm(1, 510)
+                        set_rc_channel_pwm(1, 1450)
                     if(ans == 'Right'):
-                        set_rc_channel_pwm(1, 0)
+                        set_rc_channel_pwm(1, 1550)
                     if(ans == 'Go'):
-                        set_rc_channel_pwm(3, 0)
+                        set_rc_channel_pwm(3, 1900)
 
                 except Exception as e:
                     print(e)
