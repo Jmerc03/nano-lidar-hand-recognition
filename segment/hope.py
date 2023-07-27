@@ -126,7 +126,7 @@ def arm():
 # Arm  armBlueRov2
 signal = "Stop"
 
-def moves(out):
+def moves(out, signal):
     if out == "nothing":
         out = signal
     if(out == 'Stop'):
@@ -140,6 +140,7 @@ def moves(out):
             0,
             550,
             0)
+        return signal
     if(out == 'Left'):
         print('Left send')
         print()
@@ -150,7 +151,8 @@ def moves(out):
             200,
             0,
             550,
-            0)     
+            0) 
+        return signal    
 
     if(out == 'Right'):
         print('Right send')
@@ -163,6 +165,7 @@ def moves(out):
             0,
             550,
             0)   
+        return signal
     if(out == 'Go'):
         print('Go send')
         print()
@@ -174,6 +177,7 @@ def moves(out):
             200,
             550,
             0)   
+        return signal
     
 
 
@@ -275,7 +279,8 @@ def run(
                 #print("made it in big")
                 if (not( imgRecThread.is_alive() )):
                     #print ("Creating new thread!")
-                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img), daemon=True)
+                    signal = signal
+                    imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, signal), daemon=True)
                     imgRecThread.start()
 
                     """ Que and attempt to show detected frames
@@ -311,7 +316,7 @@ def run(
         print('\nStopping.')
         lidar.stop()
 
-def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img):
+def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img, signal):
     #print ("Img Rec!")
     for path, im, im0s, vid_cap, s in dataset:
         #print ("Whatever works")
@@ -421,14 +426,14 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
             stuff = out.split(" ")
             #print(len(stuff))
             if(len(stuff) <= 3):
-                moves("nothing")
+                signal = moves("nothing", signal)
                 print("Nothing Detected")
                 return
             else:
                 out = stuff[3][:-1]
                 ans = out + " Dectected"
                 print(ans)
-                moves(out)
+                signal = moves(out, signal)
             #print("BREAK!")
             return
 
