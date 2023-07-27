@@ -124,6 +124,58 @@ def arm():
         1, 0, 0, 0, 0, 0, 0)
 
 # Arm  armBlueRov2
+signal = "Stop"
+
+def moves(out):
+    if out == "nothing":
+        out = signal
+    if(out == 'Stop'):
+        print('stop send')
+        print()
+        signal = out
+        master.mav.manual_control_send(
+            master.target_system,
+            0,
+            0,
+            0,
+            550,
+            0)
+    if(out == 'Left'):
+        print('Left send')
+        print()
+        signal = out
+        master.mav.manual_control_send(
+            master.target_system,
+            0,
+            200,
+            0,
+            550,
+            0)     
+
+    if(out == 'Right'):
+        print('Right send')
+        print()
+        signal = out
+        master.mav.manual_control_send(
+            master.target_system,
+            0,
+            -200,
+            0,
+            550,
+            0)   
+    if(out == 'Go'):
+        print('Go send')
+        print()
+        signal = out
+        master.mav.manual_control_send(
+            master.target_system,
+            0,
+            0,
+            200,
+            550,
+            0)   
+    
+
 
 @smart_inference_mode()
 def run(
@@ -369,64 +421,14 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
             stuff = out.split(" ")
             #print(len(stuff))
             if(len(stuff) <= 3):
-                master.mav.manual_control_send(
-                    master.target_system,
-                    0,
-                    0,
-                    0,
-                    550,
-                    0)
+                moves("nothing")
                 print("Nothing Detected")
                 return
             else:
                 out = stuff[3][:-1]
                 ans = out + " Dectected"
                 print(ans)
-                try:
-                    if(out == 'Stop'):
-                        print('stop send')
-                        print()
-                        master.mav.manual_control_send(
-                            master.target_system,
-                            0,
-                            0,
-                            0,
-                            550,
-                            0)
-                    if(out == 'Left'):
-                        print('Left send')
-                        print()
-                        master.mav.manual_control_send(
-                            master.target_system,
-                            0,
-                            200,
-                            0,
-                            550,
-                            0)     
-
-                    if(out == 'Right'):
-                        print('Right send')
-                        print()
-                        master.mav.manual_control_send(
-                            master.target_system,
-                            0,
-                            -200,
-                            0,
-                            550,
-                            0)   
-                    if(out == 'Go'):
-                        print('Go send')
-                        print()
-                        master.mav.manual_control_send(
-                            master.target_system,
-                            0,
-                            0,
-                            200,
-                            550,
-                            0)   
-
-                except Exception as e:
-                    print(e)
+                moves(out)
             #print("BREAK!")
             return
 
