@@ -71,6 +71,60 @@ from utils.plots import Annotator, colors, save_one_box
 from utils.segment.general import masks2segments, process_mask, process_mask_native
 from utils.torch_utils import select_device, smart_inference_mode
 
+master = mavutil.mavlink_connection('/dev/ttyACM0',921600)
+print("wait for HEartbeat")
+master.wait_heartbeat()
+print("REcieved heartbeat")
+
+def change_mode(mode):
+# Check if mode is available
+    if mode not in master.mode_mapping():
+        print('Unknown mode : {}'.format(mode))
+        print('Try:', list(master.mode_mapping().keys()))
+        sys.exit(1)
+
+    # Get mode ID
+    mode_id = master.mode_mapping()[mode]
+    # Set new mode
+    # master.mav.command_long_send(
+    #    master.target_system, master.target_component,
+    #    mavutil.mavlink.MAV_CMD_DO_SET_MODE, 0,
+    #    0, mode_id, 0, 0, 0, 0, 0) or:
+    # master.set_mode(mode_id) or:
+    master.mav.set_mode_send(
+        master.target_system,
+        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        mode_id)
+
+    while True:
+        # Wait for ACK command
+        # Would be good to add mechanism to avoid endlessly blocking
+        # if the autopilot sends a NACK or never receives the message
+        ack_msg = master.recv_match(type='COMMAND_ACK', blocking=True)
+        ack_msg = ack_msg.to_dict()
+
+        # Continue waiting if the acknowledged command is not `set_mode`
+        #if ack_msg['command'] != mavutil.mavlink.MAV_CMD_DO_SET_MODE:
+            #continue
+
+        # Print the ACK result !
+        print(mavutil.mavlink.enums['MAV_RESULT'][ack_msg['result']].description)
+        break
+
+
+# Arm
+# master.arducopter_arm() or:
+def arm():
+    print("armed")
+    master.mav.command_long_send(
+        master.target_system,
+        master.target_component,
+        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+        0,
+        1, 0, 0, 0, 0, 0, 0)
+
+# Arm  armBlueRov2
+
 @smart_inference_mode()
 def run(
     weights=ROOT / 'yolov5s-seg.pt',  # model.pt path(s)
@@ -104,113 +158,16 @@ def run(
 ):
     
     #########################################Functions################################
-
-# Arm  armBlueRov2
-def arm():
+    
+    
+    lidar.stop()
+    change_mode('MANUAL')
     master.mav.command_long_send(
         master.target_system,
         master.target_component,
         mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
         0,
         1, 0, 0, 0, 0, 0, 0)
-
-
-# Disarm
-def disarm():
-    master.mav.command_long_send(
-        master.target_system,
-        master.target_component,
-        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
-        0,
-        0, 0, 0, 0, 0, 0, 0)
-
-master = mavutil.mavlink_connection('udpin:0.0.0.0:14567')
-master.wait_heartbeat()
-
-# Create a function to send RC values
-# More information about Joystick channels
-# here: https://www.ardusub.com/operators-manual/rc-input-and-output.html#rc-inputs
-def set_rc_channel_pwm(channel_id, pwm=1500):
-    """ Set RC channel pwm value
-    Args:
-        channel_id (TYPE): Channel ID
-        pwm (int, optional): Channel pwm value 1100-1900
-    """
-    if channel_id < 1 or channel_id > 8:
-        print("Channel does not exist.")
-        return
-
-    # Mavlink 2 supports up to 18 channels:
-    # https://mavlink.io/en/messages/common.html#RC_CHANNELS_OVERRIDE
-    rc_channel_values = [65535 for _ in range(18)]
-    for i in range(6):
-        rc_channel_values[i] = 1500
-    rc_channel_values[channel_id - 1] = pwm
-    # print(rc_channel_values)
-    master.mav.rc_channels_override_send(
-        master.target_system,  # target_system
-        master.target_component,  # target_component
-        *rc_channel_values)  # RC channel list, in microseconds.
-
-
-def clear_motion(stopped_pwm=1500):
-    ''' Sets all 6 motion direction RC inputs to 'stopped_pwm'. '''
-    rc_channel_values = [65535 for _ in range(18)]
-    for i in range(6):
-        rc_channel_values[i] = stopped_pwm
-
-    master.mav.rc_channels_override_send(
-        master.target_system,  # target_system
-        master.target_component,  # target_component
-        *rc_channel_values)  # RC channel list, in microseconds.
-    # print('clear_motion')
-
-
-def change_mode(mode='MANUAL'):
-    """
-    :param mode: 'MANUAL' or 'STABILIZE' or 'ALT_HOLD'
-    """
-    if mode not in master.mode_mapping():
-        print("Unknown mode : {}".format(mode))
-        print('Try: ', list(master.mode_mapping().keys()))
-        sys.exit(1)
-    mode_id = master.mode_mapping()[mode]
-    master.mav.set_mode_send(
-        master.target_system,
-        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-        mode_id)
-
-    while True:
-        # Wait for ACK command
-        ack_msg = master.recv_match(type='COMMAND_ACK', blocking=True)
-        ack_msg = ack_msg.to_dict()
-        # Check if command in the same in `set_mode`
-        if ack_msg['command'] == mavutil.mavlink.MAVLINK_MSG_ID_SET_MODE:
-            print('success')
-            break
-
-
-def request_message_interval(message_id, frequency_hz):
-    """
-    Request MAVLink message in a desired frequency,
-    documentation for SET_MESSAGE_INTERVAL:
-        https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
-
-    Args:
-        message_id (int): MAVLink message ID
-        frequency_hz (float): Desired frequency in Hz
-    """
-    master.mav.command_long_send(
-        master.target_system, master.target_component,
-        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
-        message_id,  # The MAVLink message ID
-        1e6 / frequency_hz,
-        # The interval between two messages in microseconds. Set to -1 to disable and 0 to request default rate.
-        0,
-        # Target address of message stream (if message has target address fields). 0: Flight-stack default (recommended), 1: address of requestor, 2: broadcast.
-        0, 0, 0, 0)
-
-    lidar.stop()
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -221,7 +178,7 @@ def request_message_interval(message_id, frequency_hz):
         source = check_file(source)  # download
 
     threadHandler = ThreadHandler()
-    print(threadHandler.f())
+    #print(threadHandler.f())
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -254,15 +211,11 @@ def request_message_interval(message_id, frequency_hz):
     big = False
     #q = Queue(maxsize = 5)
 
-
-
     try:
         #print('Recording measurments... Press Crl+C to stop.')
         imgRecModel = ImgRecModel(weights, source, data, imgsz, conf_thres, iou_thres, max_det, device, view_img, save_txt, save_conf, save_crop, nosave, classes, agnostic_nms, augment, visualize, update, project, name, exist_ok, line_thickness, hide_labels, hide_conf, half, dnn, vid_stride, retina_masks)
         imgRecThread = threading.Thread(target=imgRec, args=(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, windows, save_img), daemon=True)
-                
         for measurment in hope:
-            
             angle = measurment[2]
             dis = measurment[3]
             
@@ -411,11 +364,18 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
             q.put(True)
             """
             
-            LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
+            #LOGGER.info(f"{s}{'' if len(det) else 'w'}{dt[1].dt * 1E3:.1f}ms")
             out = (f"{s}{'' if len(det) else 'w'}")
             stuff = out.split(" ")
-            print(len(stuff))
+            #print(len(stuff))
             if(len(stuff) <= 3):
+                master.mav.manual_control_send(
+                    master.target_system,
+                    0,
+                    0,
+                    0,
+                    550,
+                    0)
                 print("Nothing Detected")
                 return
             else:
@@ -423,20 +383,51 @@ def imgRec(imgRecModel, dataset, big, dt, model, seen, webcam, save_dir, names, 
                 ans = out + " Dectected"
                 print(ans)
                 try:
-                    sers = ser.Serial("/dev/ttyUSB1", 115200)
-                    sers.write(ans)
-                    if(ans == 'Stop'):
-                        set_rc_channel_pwm(3, 1500)
-                    if(ans == 'Left'):
-                        set_rc_channel_pwm(1, 1450)
-                    if(ans == 'Right'):
-                        set_rc_channel_pwm(1, 1550)
-                    if(ans == 'Go'):
-                        set_rc_channel_pwm(3, 1900)
+                    if(out == 'Stop'):
+                        print('stop send')
+                        print()
+                        master.mav.manual_control_send(
+                            master.target_system,
+                            0,
+                            0,
+                            0,
+                            550,
+                            0)
+                    if(out == 'Left'):
+                        print('Left send')
+                        print()
+                        master.mav.manual_control_send(
+                            master.target_system,
+                            0,
+                            200,
+                            0,
+                            550,
+                            0)     
+
+                    if(out == 'Right'):
+                        print('Right send')
+                        print()
+                        master.mav.manual_control_send(
+                            master.target_system,
+                            0,
+                            -200,
+                            0,
+                            550,
+                            0)   
+                    if(out == 'Go'):
+                        print('Go send')
+                        print()
+                        master.mav.manual_control_send(
+                            master.target_system,
+                            0,
+                            0,
+                            200,
+                            550,
+                            0)   
 
                 except Exception as e:
                     print(e)
-            print("BREAK!")
+            #print("BREAK!")
             return
 
 def parse_opt():
